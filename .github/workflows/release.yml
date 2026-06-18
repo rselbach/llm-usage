@@ -40,10 +40,6 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
-          - goos: windows
-            goarch: amd64
-          - goos: windows
-            goarch: arm64
     env:
       CGO_ENABLED: "0"
     steps:
@@ -61,21 +57,11 @@ jobs:
 
           mkdir -p build dist
 
-          binary="llm-usage"
-          if [[ "${{ matrix.goos }}" == "windows" ]]; then
-            binary="${binary}.exe"
-          fi
-
           GOOS="${{ matrix.goos }}" GOARCH="${{ matrix.goarch }}" \
-            go build -trimpath -ldflags="-s -w" -o "build/${binary}" .
+            go build -trimpath -ldflags="-s -w" -o "build/llm-usage" .
 
           asset_base="llm-usage_${GITHUB_REF_NAME}_${{ matrix.goos }}_${{ matrix.goarch }}"
-          if [[ "${{ matrix.goos }}" == "windows" ]]; then
-            (cd build && zip "../dist/${asset_base}.zip" "${binary}")
-            exit 0
-          fi
-
-          tar -C build -czf "dist/${asset_base}.tar.gz" "${binary}"
+          tar -C build -czf "dist/${asset_base}.tar.gz" llm-usage
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
