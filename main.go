@@ -130,9 +130,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	cfg, ok := parseFlags(args, stderr)
+	cfg, ok, exitCode := parseFlagsForRun(args, stderr)
 	if !ok {
-		return 2
+		return exitCode
 	}
 
 	skipped := map[string]int{}
@@ -175,6 +175,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func parseFlags(args []string, stderr io.Writer) (config, bool) {
+	cfg, ok, _ := parseFlagsForRun(args, stderr)
+	return cfg, ok
+}
+
+func parseFlagsForRun(args []string, stderr io.Writer) (config, bool, int) {
 	cfg := config{pricingCache: defaultCachePath, cacheTTLHours: defaultCacheTTL}
 
 	flags := flag.NewFlagSet("llm-usage", flag.ContinueOnError)
@@ -201,15 +206,18 @@ func parseFlags(args []string, stderr io.Writer) (config, bool) {
 	}
 
 	if err := flags.Parse(args); err != nil {
-		return cfg, false
+		if errors.Is(err, flag.ErrHelp) {
+			return cfg, false, 0
+		}
+		return cfg, false, 2
 	}
 	if flags.NArg() > 0 {
 		fmt.Fprintf(stderr, "unexpected argument: %s\n", flags.Arg(0))
 		flags.Usage()
-		return cfg, false
+		return cfg, false, 2
 	}
 
-	return cfg, true
+	return cfg, true, 0
 }
 
 func parseReportDuration(value string) (time.Duration, error) {
@@ -714,6 +722,10 @@ func buildPricing(records []usageRecord, cfg config, notes *[]string) map[string
 		*notes = append(*notes, "Pricing lookup skipped with --no-pricing.")
 		return nil
 	}
+	if len(records) == 0 {
+		*notes = append(*notes, "No usage records found; pricing lookup skipped.")
+		return nil
+	}
 
 	api, cacheNotes, err := loadModelsDev(expandPath(cfg.pricingCache), cfg.cacheTTLHours)
 	*notes = append(*notes, cacheNotes...)
@@ -1093,7 +1105,9 @@ func printTable(w io.Writer, title string, grouped map[groupKey]totals) {
 	for _, row := range rows[:len(rows)-1] {
 		fmt.Fprintln(w, formatRow(row))
 	}
-	fmt.Fprintln(w, strings.Join(separator, "  "))
+	if len(rows) > 1 {
+		fmt.Fprintln(w, strings.Join(separator, "  "))
+	}
 	fmt.Fprintln(w, formatRow(rows[len(rows)-1]))
 	fmt.Fprintln(w)
 }
